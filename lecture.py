@@ -7,10 +7,16 @@ from email.utils import formataddr
 import smtplib
 import json
 import os
+import sys
 
 class Lectures(UCASLogin):
     def __init__(self, username, password):
-        UCASLogin.__init__(self, username, password)
+        # 默认参数
+        self.selectedSemester = None
+        self.email = True
+        self.argParse()
+        # 系统初始化
+        super().__init__(username, password)
         self.login()
         self.courseURL = self.sepBaseURL + '/portal/site/16/801'
 
@@ -62,6 +68,9 @@ class Lectures(UCASLogin):
                 if not element.text.endswith('学期'):
                     print('当前没有任何课程')
                     return False
+                # 如果只选定特定学期，则其余学期直接跳过
+                if self.selectedSemester and element.text.find(self.selectedSemester) == -1:
+                    continue
                 courseEle = element.xpath('./following-sibling::ul//div/a')
                 lecturesBaseURL = 'https://course.ucas.ac.cn/access/content/group/'
                 courses[element.text] = \
@@ -85,12 +94,40 @@ class Lectures(UCASLogin):
             print('邮件发送成功!')
         except Exception:
             print('邮件发送失败!')
+
+    def argParse(self):
+        i = 1
+        while i < len(sys.argv):
+            if sys.argv[i] == '--semester' or sys.argv[i] == '-s':
+                # sys.argv[i+1] 是课程序号，1表示第一学期(秋)，2表示第二学期(春)，3表示第三学期(夏)
+                if (i+1) >= len(sys.argv):
+                    print('--semester(-s)后需要一个学期参数')
+                    sys.exit(-1)
+                else:
+                    if sys.argv[i+1] == '1':
+                        self.selectedSemester = '秋'
+                    elif sys.argv[i+1] == '2':
+                        self.selectedSemester = '春'
+                    elif sys.argv[i+1] == '3':
+                        self.selectedSemester = '夏'
+                    else:
+                        print('错误的学期参数! 请从1-3中进行选择')
+                        sys.exit(-1)
+                i += 2
+            elif sys.argv[i] == '--email' or sys.argv[i] == '-e':
+                self.email = True
+                i += 1
+            else:
+                print('未知参数: ' + sys.argv[i])
+                sys.exit(-1)
                         
 
 if __name__ == '__main__':
     lec = Lectures(os.getenv('SEP_USER_NAME'), os.getenv('SEP_PASSWD'))
     lec.collectLectures()
-    if lec.message != '':
+    
+    # 邮件通知服务
+    if lec.email and lec.message != '':
         lec.sendEmail(os.getenv('SENDER_EMAIL'), os.getenv('RECEIVER_EMAIL'), os.getenv('SENDER_PASSWD'))
  
 
